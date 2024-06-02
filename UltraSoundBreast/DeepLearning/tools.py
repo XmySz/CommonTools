@@ -218,7 +218,7 @@ def extractROISingleFile(imagePath, labelPath, savePath):
 def extractROIDir(imageDir, labelDir, saveDir):
     """
         提取整个目录中所有文件的ROI区域到saveDir中
-    """
+    # """
     imageFiles = sorted(glob.glob(imageDir + '/*'))
     labelFiles = sorted(glob.glob(labelDir + '/*'))
     for image, label in zip(imageFiles, labelFiles):

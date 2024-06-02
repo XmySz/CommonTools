@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import glob
 import SimpleITK as sitk
@@ -42,7 +43,14 @@ def CheckShapeMatch(imageDir, labelDir):
             continue
 
 
-def computeICC(excelPath1, excelPath2, saveExcel):
+def ComputeICC(excelPath1, excelPath2, saveExcel):
+    """
+        计算两个表格的特征的ICC, 两个表格需要具有同样的列名和行数
+    :param excelPath1:
+    :param excelPath2:
+    :param saveExcel:
+    :return:
+    """
     df1 = pd.read_excel(excelPath1)
     df2 = pd.read_excel(excelPath2)
 
@@ -65,5 +73,32 @@ def computeICC(excelPath1, excelPath2, saveExcel):
     print(f'ICC calculation completed and results are saved to {saveExcel}')
 
 
+def Equalize_HistogramInRoi(image_path, mask_path, save_path):
+    """
+        对输入的超声2D PNG格式图像的ROI区域进行直方图均衡化
+    :param image_path:
+    :param mask_path:
+    :param save_path:
+    :return:
+    """
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+    if image is None or mask is None:
+        raise ValueError("无法读取输入图像或mask图像")
+
+    result_image = np.copy(image)
+
+    roi_coords = np.where(mask > 0)
+    roi_pixels = image[roi_coords]
+
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+    equalized_roi = clahe.apply(roi_pixels)
+    result_image[roi_coords] = equalized_roi.reshape(-1)
+
+    cv2.imwrite(save_path, result_image)
+
+
 if __name__ == "__main__":
-    pass
+    CheckShapeMatch("/media/sci/P44_Pro/UltraSoundBreastData/数据集/省医训练及内部验证/规范命名/All/Images",
+                    "/media/sci/P44_Pro/UltraSoundBreastData/数据集/省医训练及内部验证/规范命名/All/Labels")

@@ -11,7 +11,7 @@ import torch.nn as nn
 from medpy.metric import sensitivity, specificity
 from sklearn.metrics import roc_auc_score, confusion_matrix
 from torchvision.transforms import ToTensor, Normalize
-from torchvision.models import resnet34
+from torchvision.models import resnet34, resnet18
 
 
 def DataNormalization(originalDir, imageSaveDir, labelSaveDir, ):
@@ -227,5 +227,73 @@ def extractROIDir(imageDir, labelDir, saveDir):
         extractROISingleFile(image, label, os.path.join(saveDir, fileName))
 
 
+def extractDeepLearningFeatures(checkpointPath, imageDir, saveExcel=None):
+    """
+        根据模型检查点加载模型, 预测整个目录
+        labelExcel: 到这里去寻找真实的label
+    """
+    features = []
+
+    def hook(module, input, output):
+        features.append(input)
+        return None
+
+    model = resnet34()
+    model.fc = nn.Linear(512, 2, bias=True)
+    # model.fc = nn.Sequential(
+    #     nn.Linear(512, 512, bias=True),
+    #     nn.LeakyReLU(),
+    #     nn.Dropout(0.3),
+    #     nn.Linear(512, 2, bias=True),
+    # )
+    model.load_state_dict(torch.load(checkpointPath))
+    model.to('cuda')
+    model.fc.register_forward_hook(hook)
+
+    files = sorted(glob.glob(imageDir + '/*'))
+    featuresDict = {}
+
+    for index, filePath in enumerate(files, 1):
+        print(f"{index}/{len(files)}, {filePath}")
+        patientId = os.path.splitext(os.path.basename(filePath))[0].split('_image')[0]
+
+        model.eval()
+        with torch.no_grad():
+            image = cv2.imread(filePath, cv2.IMREAD_GRAYSCALE)
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            image = ToTensor()(image)
+            image = Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(image)  # 规范化
+            image = image[None, :, :, :]  # 添加batch维度
+
+            pred = model(image.cuda())
+            pred = torch.argmax(pred, dim=1)
+            featuresDict[patientId] = np.array(features[-1][0].cpu())[0]
+            print(featuresDict[patientId])
+
+    df = pd.DataFrame.from_dict(featuresDict, orient="index")
+    df.to_excel(saveExcel, )
+
+
+def splitTrainValid(imageDir, labelDir, saveValidImageDir, saveValidLabelDir):
+    """
+        将数据集使用KFold随机的划分为训练集和验证集
+    """
+    from sklearn.model_selection import KFold
+
+    images = sorted(glob.glob(f"{imageDir}/*"))
+    labels = sorted(glob.glob(f"{labelDir}/*"))
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+    for trainIndex, validIndex in kf.split(images):
+        print(trainIndex, validIndex)
+        for i in validIndex:
+            shutil.move(images[i], saveValidImageDir)
+            shutil.move(labels[i], saveValidLabelDir)
+        break
+
+
 if __name__ == "__main__":
-    pass
+    extractDeepLearningFeatures("/media/sci/P44_Pro/UltraSoundBreastData/实验/深度学习/Data/CheckPoints/预训练检查点/resnet34.bin",
+                                "/media/sci/P44_Pro/UltraSoundBreastData/实验/深度学习/Data/省医/PNG/256_256/All/Images",
+                                "/media/sci/P44_Pro/UltraSoundBreastData/实验/影像组学/data/省医/深度学习特征1.xlsx")

@@ -1,25 +1,16 @@
-import os, glob, shutil
-
-dirPath = "/media/sci/P44_Pro/AdrenalGland/分类"
-
-dirs = []
-
-for r, d, files in os.walk(dirPath):
-    if len(files) > 30 and ("A1" in r or "A1.25" in r or "A1.5" in r):
-        dirs.append(r)
-
-for i in dirs:
-    print(i)
-
-mappingDict = {}
-
-index = 1
-for i in dirs:
-    mappingDict[i] = f"ag_{index:>03}_0000.nii.gz"
-    index += 1
-
 import pandas as pd
+import os, shutil
 
-df = pd.DataFrame.from_dict(mappingDict, orient="index")
+excel = r"F:\Data\AdrenalNoduleClassification\Problems\ImagesMapping.xlsx"
 
-df.to_excel("/media/sci/P44_Pro/AdrenalGland/Mapping.xlsx")
+df = pd.read_excel(excel)
+
+Radiology_IDs = df['Radiology_ID'].values
+New_Name = df['New_Name'].values
+
+mapping = dict(zip(New_Name, Radiology_IDs))
+
+files = os.listdir(r"F:\Data\AdrenalNoduleClassification\Problems\Predicts")
+for i in files:
+    os.rename(os.path.join(r"F:\Data\AdrenalNoduleClassification\Problems\Predicts", i),
+              os.path.join(r"F:\Data\AdrenalNoduleClassification\Problems\Predicts", mapping[i]))

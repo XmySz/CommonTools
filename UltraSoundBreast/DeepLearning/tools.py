@@ -274,6 +274,48 @@ def extractDeepLearningFeatures(checkpointPath, imageDir, saveExcel=None):
     df.to_excel(saveExcel, )
 
 
+def extractDeepLearningFeaturesTimm(modelName, imageDir, saveExcel=None):
+    features = []
+
+    def hook(module, input, output):
+        features.append(input)
+        return None
+
+    import timm
+
+    model = timm.create_model(model_name=modelName, pretrained=True, num_classes=2)
+    model.to('cuda')
+    model.head.fc.register_forward_hook(hook)
+
+    files = sorted(glob.glob(imageDir + '/*'))
+    featuresDict = {}
+    patientIds = []
+
+    for index, filePath in enumerate(files, 1):
+        print(f"{index}/{len(files)}, {filePath}")
+        patientId = os.path.splitext(os.path.basename(filePath))[0].split('_image')[0]
+        patientIds.append(patientId)
+
+        model.eval()
+        with torch.no_grad():
+            image = cv2.imread(filePath, cv2.IMREAD_GRAYSCALE)
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            image = ToTensor()(image)
+            image = Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(image)  # 规范化
+            image = image[None, :, :, :]  # 添加batch维度
+
+            pred = model(image.cuda())
+            pred = torch.argmax(pred, dim=1)
+            featuresDict[patientId] = np.array(features[-1][0].cpu())[0]
+            print(featuresDict[patientId])
+
+    df = pd.DataFrame.from_dict(featuresDict, orient="index")
+    df.to_excel(saveExcel, index=False)
+
+    # 保存patientIds到别的excel
+    pd.DataFrame(patientIds).to_excel(os.path.splitext(saveExcel)[0] + "_patientIds.xlsx", index=False)
+
+
 def splitTrainValid(imageDir, labelDir, saveValidImageDir, saveValidLabelDir):
     """
         将数据集使用KFold随机的划分为训练集和验证集
@@ -293,7 +335,62 @@ def splitTrainValid(imageDir, labelDir, saveValidImageDir, saveValidLabelDir):
         break
 
 
+def add_dimension_to_2d_images(input_dir, output_dir):
+    # 创建输出目录（如果不存在）
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 遍历输入目录中的所有文件
+    for file_name in os.listdir(input_dir):
+        if file_name.endswith('.nii.gz'):
+            # 读取2D图像
+            file_path = os.path.join(input_dir, file_name)
+            image = sitk.ReadImage(file_path, sitk.sitkFloat32)
+
+            # 检查图像维度
+            if image.GetDimension() == 2:
+                # 添加一个维度，将2D图像转换为3D图像
+                array = sitk.GetArrayFromImage(image)
+                array_3d = array[:, :, np.newaxis]  # 在最前面添加一个维度
+                image_3d = sitk.GetImageFromArray(array_3d)
+
+                # 保存转换后的3D图像
+                output_file_path = os.path.join(output_dir, file_name)
+                sitk.WriteImage(image_3d, output_file_path)
+                print(f"Processed and saved: {output_file_path}")
+
+
+def resize_images(images_dir, labels_dir, size):
+    """
+    Resize all PNG images in the given directories to the specified size.
+
+    :param images_dir: Directory containing the images.
+    :param labels_dir: Directory containing the labels.
+    :param size: Tuple (width, height) to resize images to.
+    """
+    for filename in os.listdir(images_dir):
+        try:
+            if filename.endswith(".png"):
+                image_path = os.path.join(images_dir, filename)
+                label_path = os.path.join(labels_dir, filename)
+
+                # Resize image
+                image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+                resized_image = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+                cv2.imwrite(image_path, resized_image)
+
+                # Resize label
+                label = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
+                resized_label = cv2.resize(label, size, interpolation=cv2.INTER_AREA)
+                cv2.imwrite(label_path, resized_label)
+
+                print(f"Resized {filename}")
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+            continue
+
+
 if __name__ == "__main__":
-    extractDeepLearningFeatures("/media/sci/P44_Pro/UltraSoundBreastData/实验/深度学习/Data/CheckPoints/预训练检查点/resnet34.bin",
-                                "/media/sci/P44_Pro/UltraSoundBreastData/实验/深度学习/Data/省医/PNG/256_256/All/Images",
-                                "/media/sci/P44_Pro/UltraSoundBreastData/实验/影像组学/data/省医/深度学习特征1.xlsx")
+    # extractDeepLearningFeaturesTimm("swinv2_base_window16_256",
+    #                                 r"F:\Data\UltraSoundBreastData\Images",
+    #                                 r"F:\Data\UltraSoundBreastData\数据集\重庆医科大学外部测试\裁剪后\256_256\深度学习特征.xlsx")
+

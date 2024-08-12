@@ -212,19 +212,23 @@ def dcm2nii_for_dir(dcms_dir, nii_dir):
             dcm2nii_for_file(r, os.path.join(nii_dir, r.split('\\')[-4] + '.nii.gz'))
 
 
-def keep_singe_side_label(label_dir, side='left'):
+def keep_singe_side_label_file(file, side='left'):
+    label = sitk.ReadImage(file)
+    labelArr = sitk.GetArrayFromImage(label)
+    print(file, labelArr.shape)
+    if side == 'left':
+        labelArr[:, :, 192:] = 0
+    elif side == 'right':
+        labelArr[:, :, :192] = 0
+    new_label = sitk.GetImageFromArray(labelArr)
+    new_label.CopyInformation(sitk.ReadImage(r"F:\Data\AdrenalNoduleClassification\Dataset\Total\1\P002630710_N_L.nii.gz"))
+    sitk.WriteImage(new_label, file)
+
+
+def keep_singe_side_label_dirs(label_dir, side='left'):
     files = sorted(glob.glob(label_dir + '/*'))
     for file in files:
-        label = sitk.ReadImage(file)
-        labelArr = sitk.GetArrayFromImage(label)
-        print(file, labelArr.shape)
-        if side == 'left':
-            labelArr[:, :, 256:] = 0
-        elif side == 'right':
-            labelArr[:, :, :256] = 0
-        new_label = sitk.GetImageFromArray(labelArr)
-        new_label.CopyInformation(label)
-        sitk.WriteImage(new_label, file)
+        keep_singe_side_label_file(file, side)
 
 
 if __name__ == "__main__":
@@ -242,5 +246,7 @@ if __name__ == "__main__":
 
     # keep_singe_side_label(r"F:\Data\AdrenalNoduleClassification\ALL\Single\Left\Labels", side='left')
 
-    CheckShapeMatching(r"F:\Data\AdrenalNoduleClassification\Dataset\Total\Images",
-                       r"F:\Data\AdrenalNoduleClassification\Dataset\Total\Labels")
+    # CheckShapeMatching(r"F:\Data\AdrenalNoduleClassification\Dataset\Total\Images",
+    #                    r"F:\Data\AdrenalNoduleClassification\Dataset\Total\Labels")
+
+    keep_singe_side_label_file(r"F:\Data\AdrenalNoduleClassification\Dataset\Total\2\P002630710_N_L.nii.gz", side='left')
